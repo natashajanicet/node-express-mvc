@@ -91,6 +91,7 @@ app.get('/500', errorController.get500Page);
 app.use(errorController.get404Page);
 
 app.use((error, req, res, next) => {
+  console.log(error);
   return res.redirect('/500');
 });
 
