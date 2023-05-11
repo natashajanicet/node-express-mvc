@@ -5,6 +5,7 @@ const nodemailer = require('nodemailer');
 const { google } = require('googleapis');
 
 const User = require('../models/user');
+const { validationResult } = require('express-validator');
 
 const CLIENT_ID = '<clientid>';
 const CLIENT_SECRET = '<clientsecret>';
@@ -42,6 +43,23 @@ async function sendEmail(recipient, subject, html) {
   return await transporter.sendMail(mailOptions);
 }
 
+function renderLoginWithValidation(
+  res,
+  errorMessage = '',
+  inputValue = { email: '', password: '' },
+  validationErrors = [],
+  status = 200
+) {
+  res.status(status).render('auth/login', {
+    path: '/login',
+    pageTitle: 'Login',
+    errorMessage: errorMessage,
+    isAuthenticated: false,
+    inputValue,
+    validationErrors: validationErrors,
+  });
+}
+
 exports.getLogin = (req, res, next) => {
   let message = req.flash('error');
   if (message.length) {
@@ -49,11 +67,7 @@ exports.getLogin = (req, res, next) => {
   } else {
     message = null;
   }
-  res.render('auth/login', {
-    path: '/login',
-    pageTitle: 'Login',
-    errorMessage: message,
-  });
+  renderLoginWithValidation(res, message);
 };
 
 exports.getSignup = (req, res, next) => {
@@ -68,6 +82,8 @@ exports.getSignup = (req, res, next) => {
     pageTitle: 'Signup',
     isAuthenticated: false,
     errorMessage: message,
+    inputValue: { email: '', password: '', confirmPassword: '' },
+    validationErrors: [],
   });
 };
 
@@ -75,22 +91,29 @@ exports.postSignup = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
   const confirmPassword = req.body.confirmPassword;
-  User.findOne({ email: email })
-    .then((userDoc) => {
-      if (userDoc) {
-        req.flash('error', 'Email exist already, please pick a different one');
-        return res.redirect('/signup');
-      }
+  const errors = validationResult(req);
 
-      return bycrypt.hash(password, 12).then((hashPassword) => {
-        const user = new User({
-          email: email,
-          password: hashPassword,
-          cart: { items: [] },
-        });
+  if (!errors.isEmpty()) {
+    return res.status(422).render('auth/signup', {
+      path: '/signup',
+      pageTitle: 'Signup',
+      isAuthenticated: false,
+      errorMessage: errors.array()[0].msg,
+      inputValue: { email, password, confirmPassword },
+      validationErrors: errors.array(),
+    });
+  }
 
-        return user.save();
+  bycrypt
+    .hash(password, 12)
+    .then((hashPassword) => {
+      const user = new User({
+        email: email,
+        password: hashPassword,
+        cart: { items: [] },
       });
+
+      return user.save();
     })
     .then(() => {
       res.redirect('/login');
@@ -107,10 +130,26 @@ exports.postLogin = (req, res, next) => {
   const email = req.body.email;
   const password = req.body.password;
 
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return renderLoginWithValidation(
+      res,
+      errors.array()[0].msg,
+      { email, password },
+      errors.array(),
+      422
+    );
+  }
+
   User.findOne({ email: email }).then((user) => {
     if (!user) {
-      req.flash('error', 'Invalid email or password');
-      return res.redirect('/reset');
+      return renderLoginWithValidation(
+        res,
+        'Invalid email or password',
+        { email, password },
+        [],
+        422
+      );
     }
 
     bycrypt
@@ -125,7 +164,13 @@ exports.postLogin = (req, res, next) => {
             res.redirect('/');
           });
         }
-        res.redirect('/login');
+        renderLoginWithValidation(
+          res,
+          'Invalid email or password',
+          { email, password },
+          [],
+          422
+        );
       })
       .catch((err) => {
         console.log(err);
