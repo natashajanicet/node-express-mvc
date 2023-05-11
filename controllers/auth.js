@@ -123,7 +123,11 @@ exports.postSignup = (req, res, next) => {
         '<h1>You have successfully signed up!</h1>'
       ).catch((err) => console.log(err));
     })
-    .catch((err) => console.log(err));
+    .catch((err) => {
+      const error = new Error(err);
+      error.httpStatus = 500;
+      return next(error);
+    });
 };
 
 exports.postLogin = (req, res, next) => {
@@ -141,42 +145,48 @@ exports.postLogin = (req, res, next) => {
     );
   }
 
-  User.findOne({ email: email }).then((user) => {
-    if (!user) {
-      return renderLoginWithValidation(
-        res,
-        'Invalid email or password',
-        { email, password },
-        [],
-        422
-      );
-    }
-
-    bycrypt
-      .compare(password, user.password)
-      .then((doMatch) => {
-        if (doMatch) {
-          req.session.isLoggedIn = true;
-          req.session.user = user;
-          // do not need to call but in case to make sure we redirect after session are set
-          return req.session.save((err) => {
-            console.log(err);
-            res.redirect('/');
-          });
-        }
-        renderLoginWithValidation(
+  User.findOne({ email: email })
+    .then((user) => {
+      if (!user) {
+        return renderLoginWithValidation(
           res,
           'Invalid email or password',
           { email, password },
           [],
           422
         );
-      })
-      .catch((err) => {
-        console.log(err);
-        res.redirect('/login');
-      });
-  });
+      }
+
+      bycrypt
+        .compare(password, user.password)
+        .then((doMatch) => {
+          if (doMatch) {
+            req.session.isLoggedIn = true;
+            req.session.user = user;
+            // do not need to call but in case to make sure we redirect after session are set
+            return req.session.save((err) => {
+              console.log(err);
+              res.redirect('/');
+            });
+          }
+          renderLoginWithValidation(
+            res,
+            'Invalid email or password',
+            { email, password },
+            [],
+            422
+          );
+        })
+        .catch((err) => {
+          console.log(err);
+          res.redirect('/login');
+        });
+    })
+    .catch((err) => {
+      const error = new Error(err);
+      error.httpStatus = 500;
+      return next(error);
+    });
 };
 
 exports.postLogout = (req, res, next) => {
@@ -227,7 +237,11 @@ exports.postReset = (req, res, next) => {
         <p>Click this <a href="http://localhost:3000/reset/${token}">link</a> to set a new password</p>`
         );
       })
-      .catch((err) => console.log(err));
+      .catch((err) => {
+        const error = new Error(err);
+        error.httpStatus = 500;
+        return next(error);
+      });
   });
 };
 
@@ -250,7 +264,11 @@ exports.getNewPassword = (req, res, next) => {
         resetToken: token,
       });
     })
-    .catch((err) => console.log(err));
+    .catch((err) => {
+      const error = new Error(err);
+      error.httpStatus = 500;
+      return next(error);
+    });
 };
 
 exports.postNewPassword = (req, res, next) => {
@@ -282,5 +300,9 @@ exports.postNewPassword = (req, res, next) => {
     .then(() => {
       res.redirect('/login');
     })
-    .catch((err) => console.log(err));
+    .catch((err) => {
+      const error = new Error(err);
+      error.httpStatus = 500;
+      return next(error);
+    });
 };

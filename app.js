@@ -14,8 +14,8 @@ const User = require('./models/user');
 
 const app = express();
 const store = new MongoDBStore({
-    uri: 'mongodb://0.0.0.0:27017/shop',
-    collection: 'session'
+  uri: 'mongodb://0.0.0.0:27017/shop',
+  collection: 'session',
 });
 const csrfProtection = csrf();
 
@@ -25,43 +25,61 @@ app.set('views', 'views');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({ secret: 'secretkey', resave: false, saveUninitialized: false, store: store }));
+app.use(
+  session({
+    secret: 'secretkey',
+    resave: false,
+    saveUninitialized: false,
+    store: store,
+  })
+);
 app.use(csrfProtection);
 app.use(flash());
 
 app.use((req, res, next) => {
-    if (!req.session.user) {
-        return next();
-    }
-
-    User.findById(req.session.user._id)
-        .then(user => {
-            req.user = user;
-            next();
-        })
-        .catch(error => console.log(error));
-})
+  // To include this params in every render method
+  res.locals.isAuthenticated = req.session.isLoggedIn;
+  res.locals.csrfToken = req.csrfToken();
+  next();
+});
 
 app.use((req, res, next) => {
-    // To include this params in every render method
-    res.locals.isAuthenticated = req.session.isLoggedIn;
-    res.locals.csrfToken = req.csrfToken();
-    next();
-})
+  if (!req.session.user) {
+    return next();
+  }
+
+  User.findById(req.session.user._id)
+    .then((user) => {
+      if (!user) {
+        return next();
+      }
+      req.user = user;
+      next();
+    })
+    .catch((err) => {
+      const error = new Error(err);
+      error.httpStatus = 500;
+      return next(error);
+    });
+});
+
 
 app.use('/admin', adminRoutes);
 app.use(shopRoutes);
 app.use(authRoutes);
 
+app.get('/500', errorController.get500Page);
 app.use(errorController.get404Page);
 
+app.use((error, req, res, next) => {
+  return res.redirect('/500');
+});
+
 mongoose
-    .connect('mongodb://0.0.0.0:27017/shop?retryWrites=true&w=majority')
-    .then(result => {
-        app.listen(3000)
-    })
-    .catch(err => {
-        console.log(err);
-    });
-
-
+  .connect('mongodb://0.0.0.0:27017/shop?retryWrites=true&w=majority')
+  .then((result) => {
+    app.listen(3000);
+  })
+  .catch((err) => {
+    console.log(err);
+  });
