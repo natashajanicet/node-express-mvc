@@ -3,6 +3,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoDBStore = require('connect-mongodb-session')(session);
+const csrf = require('csurf');
+const flash = require('connect-flash');
 
 const adminRoutes = require('./routes/admin');
 const shopRoutes = require('./routes/shop');
@@ -15,6 +17,7 @@ const store = new MongoDBStore({
     uri: 'mongodb://0.0.0.0:27017/shop',
     collection: 'session'
 });
+const csrfProtection = csrf();
 
 app.set('view engine', 'ejs');
 app.set('views', 'views');
@@ -22,7 +25,9 @@ app.set('views', 'views');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({ secret: 'secretkey', resave: false, saveUninitialized: false, store: store }))
+app.use(session({ secret: 'secretkey', resave: false, saveUninitialized: false, store: store }));
+app.use(csrfProtection);
+app.use(flash());
 
 app.use((req, res, next) => {
     if (!req.session.user) {
@@ -37,6 +42,13 @@ app.use((req, res, next) => {
         .catch(error => console.log(error));
 })
 
+app.use((req, res, next) => {
+    // To include this params in every render method
+    res.locals.isAuthenticated = req.session.isLoggedIn;
+    res.locals.csrfToken = req.csrfToken();
+    next();
+})
+
 app.use('/admin', adminRoutes);
 app.use(shopRoutes);
 app.use(authRoutes);
@@ -46,18 +58,6 @@ app.use(errorController.get404Page);
 mongoose
     .connect('mongodb://0.0.0.0:27017/shop?retryWrites=true&w=majority')
     .then(result => {
-        User.findOne().then(user => {
-            if (!user) {
-                const user = new User({
-                    name: 'Natasha',
-                    email: 'natasha@mail.com',
-                    cart: {
-                        items: []
-                    }
-                })
-                user.save();
-            }
-        })
         app.listen(3000)
     })
     .catch(err => {
