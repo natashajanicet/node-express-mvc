@@ -1,15 +1,15 @@
+const crypto = require('crypto');
+
 const bycrypt = require('bcryptjs');
 const nodemailer = require('nodemailer');
 const { google } = require('googleapis');
 
 const User = require('../models/user');
 
-const CLIENT_ID =
-  '669484067505-akmicmkinb7tkjsni4mp6bkl87ft9c0f.apps.googleusercontent.com';
-const CLIENT_SECRET = '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';
+const CLIENT_ID = '<clientid>';
+const CLIENT_SECRET = '<clientsecret>';
 const REDIRECT_URI = 'https://developers.google.com/oauthplayground';
-const REFRESH_TOKEN =
-  '1//04N2ZBG3AIe7tCgYIARAAGAQSNwF-L9IriicEwKnw9CZwrIxQPAkzjTenTLb4x5KvfD2jUssmZR9KmZrkj8SfDQ09IsJ8iCmng-c';
+const REFRESH_TOKEN = '<refreshtoken>';
 
 const oAuth2Client = new google.auth.OAuth2(
   CLIENT_ID,
@@ -20,30 +20,27 @@ oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
 
 async function sendEmail(recipient, subject, html) {
   const accessToken = await oAuth2Client.getAccessToken();
-  const transporter = nodemailer.createTransport(
-    {
-      service: 'Gmail',
-      auth: {
-        type: 'OAuth2',
-        user: 'natashajlearn@gmail.com',
-        clientId: CLIENT_ID,
-        clientSecret: CLIENT_SECRET,
-        refreshToken: REFRESH_TOKEN,
-        accessToken: accessToken
-      }
-    }
-  );
+  const transporter = nodemailer.createTransport({
+    service: 'Gmail',
+    auth: {
+      type: 'OAuth2',
+      user: 'yourmail@gmail.com',
+      clientId: CLIENT_ID,
+      clientSecret: CLIENT_SECRET,
+      refreshToken: REFRESH_TOKEN,
+      accessToken: accessToken,
+    },
+  });
 
   const mailOptions = {
-    from: 'natashajlearn@gmail.com',
+    from: 'yourmail@gmail.com',
     to: recipient,
     html: html,
-    subject: subject
-  }
+    subject: subject,
+  };
 
-  return (await transporter.sendMail(mailOptions));
+  return await transporter.sendMail(mailOptions);
 }
-
 
 exports.getLogin = (req, res, next) => {
   let message = req.flash('error');
@@ -98,10 +95,10 @@ exports.postSignup = (req, res, next) => {
     .then(() => {
       res.redirect('/login');
       return sendEmail(
-          email,
-          'Sigup Success',
-          '<h1>You have successfully signed up!</h1>'
-        ).catch((err) => console.log(err));
+        email,
+        'Sigup Success',
+        '<h1>You have successfully signed up!</h1>'
+      ).catch((err) => console.log(err));
     })
     .catch((err) => console.log(err));
 };
@@ -113,7 +110,7 @@ exports.postLogin = (req, res, next) => {
   User.findOne({ email: email }).then((user) => {
     if (!user) {
       req.flash('error', 'Invalid email or password');
-      return res.redirect('/login');
+      return res.redirect('/reset');
     }
 
     bycrypt
@@ -141,4 +138,104 @@ exports.postLogout = (req, res, next) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
+};
+
+exports.getReset = (req, res, next) => {
+  let message = req.flash('error');
+  if (message.length) {
+    message = message[0];
+  } else {
+    message = null;
+  }
+  res.render('auth/reset', {
+    path: '/reset',
+    pageTitle: 'Reset Password',
+    errorMessage: message,
+  });
+};
+
+exports.postReset = (req, res, next) => {
+  crypto.randomBytes(32, (err, buffer) => {
+    if (err) {
+      console.log(err);
+      return redirect('/reset');
+    }
+
+    const token = buffer.toString('hex');
+    User.findOne({ email: req.body.email })
+      .then((user) => {
+        if (!user) {
+          req.flash('error', 'No account with that email found');
+          return res.redirect('/reset');
+        }
+
+        user.resetToken = token;
+        user.resetTokenExpiration = Date.now() + 3600000;
+        return user.save();
+      })
+      .then((result) => {
+        res.redirect('/');
+        return sendEmail(
+          req.body.email,
+          'Password Reset',
+          `<p>You requested new password</p>
+        <p>Click this <a href="http://localhost:3000/reset/${token}">link</a> to set a new password</p>`
+        );
+      })
+      .catch((err) => console.log(err));
+  });
+};
+
+exports.getNewPassword = (req, res, next) => {
+  const token = req.params.token;
+
+  User.findOne({ resetToken: token, resetTokenExpiraton: { $gt: Date.now() } })
+    .then((user) => {
+      let message = req.flash('error');
+      if (message.length) {
+        message = message[0];
+      } else {
+        message = null;
+      }
+      res.render('auth/new-password', {
+        path: '/new-password',
+        pageTitle: 'New Password',
+        errorMessage: message,
+        userId: user._id.toString(),
+        resetToken: token,
+      });
+    })
+    .catch((err) => console.log(err));
+};
+
+exports.postNewPassword = (req, res, next) => {
+  const userId = req.body.userId;
+  const resetToken = req.body.resetToken;
+  const newPassword = req.body.password;
+  let resetUser;
+
+  User.findOne({
+    resetToken: resetToken,
+    resetTokenExpiraton: { $gt: Date.now() },
+    _id: userId,
+  })
+    .then((user) => {
+      if (!user) {
+      }
+
+      resetUser = user;
+
+      return bycrypt.hash(newPassword, 12);
+    })
+    .then((hashedPassword) => {
+      resetUser.password = hashedPassword;
+      resetUser.resetToken = undefined;
+      resetUser.resetTokenExpiration = undefined;
+
+      resetUser.save();
+    })
+    .then(() => {
+      res.redirect('/login');
+    })
+    .catch((err) => console.log(err));
 };
