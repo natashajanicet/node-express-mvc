@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const PDFDocument = require('pdfkit');
-const stripe = require('stripe')('<security_key>')
+const { stripeKey } = require('../config');
+const stripe = require('stripe')(stripeKey)
 
 const Product = require('../models/product');
 const Order = require('../models/order');

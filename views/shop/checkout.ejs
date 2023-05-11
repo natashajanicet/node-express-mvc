@@ -21,7 +21,7 @@
                 <script src="https://js.stripe.com/v3/"></script>
 
                 <script>
-                    var stripe = Stripe('<publishable_key>');
+                    var stripe = Stripe('pk_test_51MtM9cDUP5yEwmNMWEzqYBtkn3oyXzH0IRNZusMxrdAjA0sbTgq0C3VJsbLysoyrTd8Lis3PuT38GYxlCCAK5oRk00lFnxojbN');
                     var orderBtn = document.getElementById('order-btn');
                     orderBtn.addEventListener('click', function() {
                         stripe.redirectToCheckout({
